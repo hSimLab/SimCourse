@@ -143,7 +143,7 @@ int main() {
   };
 
   Memory mem;
-  
+
   // Define entry point
   std::size_t entryAddr = 42;
 
@@ -161,7 +161,7 @@ int main() {
   // init regfile
   cpu.regs[2] = 20;
   cpu.regs[3] = 40;
-  
+
   // main loop
   while (!cpu.finished) {
     auto bytes = fetch(&cpu);
