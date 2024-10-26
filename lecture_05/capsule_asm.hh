@@ -9,7 +9,7 @@
                  : "%eax");
 
 #define LOAD_CAPSULE(dst, mem_data) \
-    __asm__("mov %[data], %[rd]" : [rd] "=r"(dst) : [data] "m"(mem_data));
+    asm volatile("mov %[data], %[rd]" : [rd] "=r"(dst) : [data] "m"(mem_data));
 
 #define STORE_CAPSULE(dst, mem_addr)        \
     asm volatile("mov %[data], %[addr]\n\t" \
