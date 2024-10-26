@@ -158,16 +158,7 @@ void execute(CpuState *cpu, Instruction insn) {
 int main() {
     // Define program
     std::uint32_t program[] = {
-        0x01010203,  // Add x1, x2, x3
-        0x01040203,  // Add x4, x2, x3
-        0x07080102,  // Sub x8, x1, x2
-        0x06070105,  // Beq x7, x1, x4
-        0x03000000,  // Jump x0
-        0x01030303,  // Add x3, x3, x3
-        0x01020202,  // Add x2, x2, x2
-        0x05070200,  // Store x7, x2
-        0x04090200,  // Load x9, x2
-        0x02000000,  // Halt
+#include "code.hpp"
     };
     //
 
@@ -188,10 +179,7 @@ int main() {
     cpu.pc = entryAddr;
 
     // init regfile
-    cpu.regs[0] = 47;
-    cpu.regs[2] = 10;
-    cpu.regs[3] = 20;
-    cpu.regs[7] = 48;
+#include "regfile.ini"
 
     // main loop
     while (!cpu.finished) {

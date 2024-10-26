@@ -138,8 +138,7 @@ int main() {
 
   // Define program
   std::uint32_t program[] = {
-      0x01010203, // Add x1, x2, x3
-      0x02000000, // Halt
+#include "code.hpp"
   };
 
   Memory mem;
@@ -158,9 +157,8 @@ int main() {
   // set entry point
   cpu.pc = entryAddr;
 
-  // init regfile
-  cpu.regs[2] = 20;
-  cpu.regs[3] = 40;
+    // init regfile
+#include "regfile.ini"
 
   // main loop
   while (!cpu.finished) {
