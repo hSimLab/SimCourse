@@ -1,12 +1,10 @@
+#include <asmjit/asmjit.h>
+
 #include <cassert>
 #include <cstdint>
 #include <iostream>
 #include <ostream>
-#include <string>
-#include <unordered_map>
 #include <vector>
-
-#include "capsule_asm.hh"
 
 using Register = std::uint32_t;
 using Addr = std::uint32_t;
@@ -27,10 +25,9 @@ enum class Opcode : std::uint8_t {
     kLoad,
     kStore,
     kBeq,
-    kSub,
 };
 
-struct Memory {
+class Memory {
     std::vector<Register> m_data;
 
 public:
@@ -48,6 +45,10 @@ struct CpuState {
     Register regs[kNumRegisters]{};
     Memory *memory{};
     bool finished{false};
+
+    //! NOTE: asmjit usage
+    asmjit::JitRuntime runtime;
+    using FuncTy = void (*)(void);
 
     explicit CpuState(Memory *mem) : memory(mem) {}
 
@@ -69,7 +70,6 @@ struct Instruction {
     Register src1{}, src2{}, dst{};
 };
 
-Register fetch(CpuState *cpu) { return cpu->memory->load(cpu->pc); }
 
 Opcode get_opcode(Register bytes) {
     // Get highest byte
@@ -82,12 +82,12 @@ Register get_src2(Register bytes) {
     return bytes & 0xFFU;
 }
 
+Register fetch(CpuState *cpu) { return cpu->memory->load(cpu->pc); }
 Instruction decode(Register bytes) {
     Instruction insn{};
     insn.opc = get_opcode(bytes);
     switch (insn.opc) {
         case Opcode::kAdd:
-        case Opcode::kSub:
         case Opcode::kHalt:
         case Opcode::kJump:
         case Opcode::kLoad:
@@ -105,71 +105,119 @@ Instruction decode(Register bytes) {
 }
 
 void execute(CpuState *cpu, Instruction insn) {
+    asmjit::CodeHolder code;
+    code.init(cpu->runtime.environment());
+
+    asmjit::x86::Assembler assembler{&code};
+
     switch (insn.opc) {
         case Opcode::kAdd: {
-            ARITHM_CAPSULE("add", cpu->regs[insn.dst], cpu->regs[insn.src1],
-                           cpu->regs[insn.src2])
+            assembler.mov(asmjit::x86::eax, cpu->regs[insn.src1]);
+            assembler.add(asmjit::x86::eax, cpu->regs[insn.src2]);
+            //
+            assembler.mov(
+                asmjit::x86::dword_ptr((size_t)(&(cpu->regs[insn.dst]))),
+                asmjit::x86::eax);
 
-            ADVANCE_PC(cpu->pc)
-            break;
-        }
-        case Opcode::kSub: {
-            ARITHM_CAPSULE("sub", cpu->regs[insn.dst], cpu->regs[insn.src1],
-                           cpu->regs[insn.src2])
+            assembler.mov(asmjit::x86::eax, cpu->pc);
+            assembler.add(asmjit::x86::eax, 1);
 
-            ADVANCE_PC(cpu->pc)
+            assembler.mov(asmjit::x86::dword_ptr((size_t)(&cpu->pc)),
+                          asmjit::x86::eax);
+
+            assembler.ret();
             break;
         }
         case Opcode::kHalt: {
             cpu->finished = true;
+            assembler.ret();
             break;
         }
         case Opcode::kJump: {
-            asm volatile("mov %[rd], %[pc]\n\t"
-                         : [pc] "+r"(cpu->pc)
-                         : [rd] "r"(cpu->regs[insn.dst]));
+            assembler.mov(asmjit::x86::eax, cpu->getReg(insn.dst));
+            assembler.mov(asmjit::x86::dword_ptr((size_t)(&cpu->pc)),
+                          asmjit::x86::eax);
 
+            assembler.ret();
             break;
         }
         case Opcode::kLoad: {
-            LOAD_CAPSULE(cpu->regs[insn.dst],
-                         cpu->memory->data().at(cpu->regs[insn.src1]))
+            assembler.mov(asmjit::x86::eax,
+                          cpu->memory->data().at(cpu->regs[insn.src1]));
 
-            ADVANCE_PC(cpu->pc)
+            assembler.mov(
+                asmjit::x86::dword_ptr((size_t)(&(cpu->regs[insn.dst]))),
+                asmjit::x86::eax);
+
+            assembler.mov(asmjit::x86::eax, cpu->pc);
+            assembler.add(asmjit::x86::eax, 1);
+            assembler.mov(asmjit::x86::dword_ptr((size_t)(&cpu->pc)),
+                          asmjit::x86::eax);
+            assembler.ret();
             break;
         }
         case Opcode::kStore: {
-            STORE_CAPSULE(cpu->regs[insn.dst],
-                          cpu->memory->data().at(cpu->regs[insn.src1]))
+            assembler.mov(asmjit::x86::dword_ptr((size_t)(&cpu->memory->data().at(
+                              cpu->regs[insn.src1]))),
+                          cpu->regs[insn.dst]);
 
-            ADVANCE_PC(cpu->pc)
+            assembler.mov(asmjit::x86::eax, cpu->pc);
+            assembler.add(asmjit::x86::eax, 1);
+
+            assembler.mov(asmjit::x86::dword_ptr((size_t)(&cpu->pc)),
+                          asmjit::x86::eax);
+
+            assembler.ret();
             break;
         }
         case Opcode::kBeq: {
-            B_COND_CAPSULE("je", cpu->pc, cpu->regs[insn.dst],
-                           cpu->regs[insn.src1], cpu->regs[insn.src2])
+            asmjit::Label beq_beg = assembler.newLabel(),
+                          beq_end = assembler.newLabel();
+
+            assembler.mov(asmjit::x86::eax, cpu->regs[insn.src1]);
+            assembler.cmp(asmjit::x86::eax, cpu->regs[insn.src2]);
+
+            assembler.je(beq_beg);
+
+            assembler.mov(asmjit::x86::eax, cpu->pc);
+            assembler.add(asmjit::x86::eax, 1);
+            assembler.jmp(beq_end);
+
+            assembler.bind(beq_beg);
+
+            assembler.mov(asmjit::x86::eax, cpu->pc);
+            assembler.mov(asmjit::x86::eax, cpu->regs[insn.dst]);
+
+            assembler.bind(beq_end);
+
+            assembler.mov(asmjit::x86::dword_ptr((size_t)(&cpu->pc)),
+                          asmjit::x86::eax);
+
+            assembler.ret();
             break;
         }
         default:
             assert(false && "Unknown instruction");
     }
+
+    CpuState::FuncTy exec_func{};
+    asmjit::Error err = cpu->runtime.add(&exec_func, &code);
+    //
+    if (err) {
+        std::cout << "AsmJit failed: " << asmjit::DebugUtils::errorAsString(err)
+                  << std::endl;
+        return;
+    }
+
+    exec_func();
+    cpu->runtime.release(exec_func);
 }
 
 int main() {
     // Define program
     std::uint32_t program[] = {
-        0x01010203,  // Add x1, x2, x3
-        0x01040203,  // Add x4, x2, x3
-        0x07080102,  // Sub x8, x1, x2
-        0x06070105,  // Beq x7, x1, x4
-        0x03000000,  // Jump x0
-        0x01030303,  // Add x3, x3, x3
-        0x01020202,  // Add x2, x2, x2
-        0x05070200,  // Store x7, x2
-        0x04090200,  // Load x9, x2
-        0x02000000,  // Halt
+#include "code.hpp"
     };
-    //
 
     Memory mem;
 
@@ -188,10 +236,7 @@ int main() {
     cpu.pc = entryAddr;
 
     // init regfile
-    cpu.regs[0] = 47;
-    cpu.regs[2] = 10;
-    cpu.regs[3] = 20;
-    cpu.regs[7] = 48;
+#include "regfile.ini"
 
     // main loop
     while (!cpu.finished) {
@@ -201,6 +246,6 @@ int main() {
         execute(&cpu, insn);
     }
 
-    std::cout << "Done execution" << std::endl;
     cpu.dump();
+    std::cout << "Done execution" << std::endl;
 }
