@@ -1,3 +1,6 @@
+#include "asmjit/core/compiler.h"
+#include "asmjit/core/func.h"
+#include "asmjit/core/logger.h"
 #include "asmjit/x86/x86compiler.h"
 #include "asmjit/x86/x86operand.h"
 #include <asmjit/asmjit.h>
@@ -5,6 +8,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <iostream>
 #include <ostream>
 #include <unordered_map>
@@ -174,32 +178,46 @@ std::vector<Instruction> lookup_bb(CpuState *cpu, Register addr) {
 //     return cpu->bb_cache.at(addr);
 // }
 
+// helpers
+static Register loadHelper(Memory *mem, Register addr) {
+  return mem->load(addr);
+}
+static void storeHelper(Memory *mem, Register addr, Register value) {
+  return mem->store(addr, value);
+}
+
 std::pair<CpuState::FuncTy, std::size_t>
 translate(CpuState *cpu, const std::vector<Instruction> &bb) {
   std::size_t icount = 0;
   asmjit::CodeHolder code;
   code.init(cpu->runtime.environment());
+  asmjit::FileLogger logger{stdout};
+  // code.setLogger(&logger);
 
   asmjit::x86::Compiler cc{&code};
+  cc.addFunc(asmjit::FuncSignature::build<void>());
 
   auto toDwordPtr = [&](auto &arg) {
     return asmjit::x86::dword_ptr((size_t)(&arg));
   };
 
+  auto temp = cc.newGpd();
+  auto temp2 = cc.newGpd();
+  auto toRet = cc.newGpd();
+
   for (auto insn : bb) {
     switch (insn.opc) {
     case Opcode::kAdd: {
-      cc.mov(asmjit::x86::eax, toDwordPtr(cpu->regs[insn.src1]));
-      cc.add(asmjit::x86::eax, toDwordPtr(cpu->regs[insn.src2]));
+      cc.mov(temp, toDwordPtr(cpu->regs[insn.src1]));
+      cc.mov(temp2, toDwordPtr(cpu->regs[insn.src2]));
+      cc.add(temp, temp2);
       //
-      cc.mov(asmjit::x86::dword_ptr((size_t)(&(cpu->regs[insn.dst]))),
-                    asmjit::x86::eax);
+      cc.mov(asmjit::x86::dword_ptr((size_t)(&(cpu->regs[insn.dst]))), temp);
 
-      cc.mov(asmjit::x86::eax, toDwordPtr(cpu->pc));
-      cc.add(asmjit::x86::eax, 1);
+      cc.mov(temp, toDwordPtr(cpu->pc));
+      cc.add(temp, 1);
 
-      cc.mov(asmjit::x86::dword_ptr((size_t)(&cpu->pc)),
-                    asmjit::x86::eax);
+      cc.mov(asmjit::x86::dword_ptr((size_t)(&cpu->pc)), temp);
 
       break;
     }
@@ -209,61 +227,68 @@ translate(CpuState *cpu, const std::vector<Instruction> &bb) {
       break;
     }
     case Opcode::kJump: {
-      cc.mov(asmjit::x86::eax, toDwordPtr(cpu->regs[insn.dst]));
-      cc.mov(asmjit::x86::dword_ptr((size_t)(&cpu->pc)),
-                    asmjit::x86::eax);
+      cc.mov(temp, toDwordPtr(cpu->regs[insn.dst]));
+      cc.mov(asmjit::x86::dword_ptr((size_t)(&cpu->pc)), temp);
 
       cc.ret();
       break;
     }
     case Opcode::kLoad: {
-      cc.mov(asmjit::x86::eax,
-                    toDwordPtr(cpu->memory->data().at(cpu->regs[insn.src1])));
+      asmjit::InvokeNode *invoke{};
+      cc.mov(temp, toDwordPtr(cpu->regs[insn.src1]));
 
-      cc.mov(asmjit::x86::dword_ptr((size_t)(&(cpu->regs[insn.dst]))),
-                    asmjit::x86::eax);
+      cc.invoke(&invoke, (size_t)loadHelper,
+                asmjit::FuncSignature::build<Register, Memory *, Register>());
+      invoke->setArg(0, cpu->memory);
+      invoke->setArg(1, temp);
+      invoke->setRet(0, toRet);
 
-      cc.mov(asmjit::x86::eax, toDwordPtr(cpu->pc));
-      cc.add(asmjit::x86::eax, 1);
-      cc.mov(asmjit::x86::dword_ptr((size_t)(&cpu->pc)),
-                    asmjit::x86::eax);
+      cc.mov(toDwordPtr(cpu->regs[insn.dst]), toRet);
+
+      cc.mov(temp, toDwordPtr(cpu->pc));
+      cc.add(temp, 1);
+      cc.mov(asmjit::x86::dword_ptr((size_t)(&cpu->pc)), temp);
       break;
     }
     case Opcode::kStore: {
-      cc.mov(asmjit::x86::eax, toDwordPtr(cpu->regs[insn.dst]));
-      cc.mov(asmjit::x86::dword_ptr((
-                        size_t)(&cpu->memory->data().at(cpu->regs[insn.src1]))),
-                    asmjit::x86::eax);
+      cc.mov(temp, toDwordPtr(cpu->regs[insn.dst]));
+      cc.mov(toRet, toDwordPtr(cpu->regs[insn.src1]));
 
-      cc.mov(asmjit::x86::eax, toDwordPtr(cpu->pc));
-      cc.add(asmjit::x86::eax, 1);
+      asmjit::InvokeNode *invoke{};
+      cc.invoke(
+          &invoke, (size_t)storeHelper,
+          asmjit::FuncSignature::build<void, Memory *, Register, Register>());
+      invoke->setArg(0, cpu->memory);
+      invoke->setArg(1, toRet);
+      invoke->setArg(2, temp);
 
-      cc.mov(asmjit::x86::dword_ptr((size_t)(&cpu->pc)),
-                    asmjit::x86::eax);
+      cc.mov(temp, toDwordPtr(cpu->pc));
+      cc.add(temp, 1);
+
+      cc.mov(asmjit::x86::dword_ptr((size_t)(&cpu->pc)), temp);
 
       break;
     }
     case Opcode::kBeq: {
-      asmjit::Label beq_beg = cc.newLabel(),
-                    beq_end = cc.newLabel();
+      asmjit::Label beq_beg = cc.newLabel(), beq_end = cc.newLabel();
 
-      cc.mov(asmjit::x86::eax, toDwordPtr(cpu->regs[insn.src1]));
-      cc.cmp(asmjit::x86::eax, toDwordPtr(cpu->regs[insn.src2]));
+      cc.mov(temp, toDwordPtr(cpu->regs[insn.src1]));
+      cc.mov(temp2, toDwordPtr(cpu->regs[insn.src2]));
+      cc.cmp(temp, temp2);
 
       cc.je(beq_beg);
 
-      cc.mov(asmjit::x86::eax, toDwordPtr(cpu->pc));
-      cc.add(asmjit::x86::eax, 1);
+      cc.mov(temp, toDwordPtr(cpu->pc));
+      cc.add(temp, 1);
       cc.jmp(beq_end);
 
       cc.bind(beq_beg);
 
-      cc.mov(asmjit::x86::eax, toDwordPtr(cpu->regs[insn.dst]));
+      cc.mov(temp, toDwordPtr(cpu->regs[insn.dst]));
 
       cc.bind(beq_end);
 
-      cc.mov(asmjit::x86::dword_ptr((size_t)(&cpu->pc)),
-                    asmjit::x86::eax);
+      cc.mov(asmjit::x86::dword_ptr((size_t)(&cpu->pc)), temp);
 
       cc.ret();
       break;
