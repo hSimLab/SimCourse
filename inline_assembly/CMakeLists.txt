@@ -1,8 +1,7 @@
-cmake_minimum_required(VERSION 3.16)
-
-project(toy-sim)
+set(NAME inline_assembly)
 
 set(CMAKE_CXX_FLAGS "-Wall -Wextra")
 set(CMAKE_CXX_FLAGS_RELEASE "-O0")
 
-add_executable(${PROJECT_NAME} sim.cc)
+add_executable(${NAME} sim.cc)
+target_include_directories(${NAME} PRIVATE ${CMAKE_SOURCE_DIR}/test)

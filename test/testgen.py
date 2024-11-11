@@ -6,8 +6,6 @@ REG_FILE_SIZE = 31
 K_MAX_VAL = 100000
 ENTRY_POINT = 42
 
-DIRS = ["naive_interpreter", "inline_assembly",
-        "asmjit_assembly", "jit_translator"]
 
 def gen_binop(opcode: int , mnemonic : str, rd : int, rs1 : int, rs2 : int):
     return "0x" + f"{opcode:02x}{rd:02x}{rs1:02x}{rs2:02x},\
@@ -23,16 +21,15 @@ def gen_load_op(opcode: int, mnemonic: str, rd: int, rs1: int):
                 // {mnemonic} x{rd}, x{rs1}"
 
 def gen_regfile_ini(icount : int, code_section_begin : int, iter_num : int):
-    for directory in DIRS:
-        with open(f"{directory}/regfile.ini", mode='w+') as f:
-            print(f"cpu.regs[0] = {ENTRY_POINT};", file=f)
-            print(f"cpu.regs[1] = 0; // init value", file=f)
-            print(f"cpu.regs[2] = 1; // reduction value", file=f)
-            print(f"cpu.regs[3] = {iter_num}; // loop iter num", file=f)
-            print(
-                f"cpu.regs[30] = {ENTRY_POINT + code_section_begin}; // code start", file=f)
-            print(
-                f"cpu.regs[31] = {ENTRY_POINT + icount}; // final pc", file=f)
+    with open(f"regfile.ini", mode='w+') as f:
+        print(f"cpu.regs[0] = {ENTRY_POINT};", file=f)
+        print(f"cpu.regs[1] = 0; // init value", file=f)
+        print(f"cpu.regs[2] = 1; // reduction value", file=f)
+        print(f"cpu.regs[3] = {iter_num}; // loop iter num", file=f)
+        print(
+            f"cpu.regs[30] = {ENTRY_POINT + code_section_begin}; // code start", file=f)
+        print(
+            f"cpu.regs[31] = {ENTRY_POINT + icount}; // final pc", file=f)
 
 def gen_bytecode() -> int:
     code : list[str] = []
@@ -67,10 +64,9 @@ def gen_bytecode() -> int:
     code += ["0x02000000,  // halt"]
     code += ["#endif // SAMPLE_CODE_HH"]
 
-    for directory in DIRS:
-        with open(f"{directory}/code.hpp", mode='w+') as f:
-            for line in code:
-                print(line, file=f)
+    with open(f"code.hpp", mode='w+') as f:
+        for line in code:
+            print(line, file=f)
 
     return icount, init_section_end
 

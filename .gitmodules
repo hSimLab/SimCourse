@@ -1,6 +1,3 @@
-[submodule "jit_translator/third_party/asmjit"]
-	path = jit_translator/third_party/asmjit
-	url = git@github.com:asmjit/asmjit.git
-[submodule "asmjit_assembly/third_party/asmjit"]
-	path = asmjit_assembly/third_party/asmjit
-	url = git@github.com:asmjit/asmjit.git
+[submodule "third_party/asmjit"]
+	path = third_party/asmjit
+	url = https://github.com/asmjit/asmjit

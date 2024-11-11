@@ -1,13 +1,10 @@
-cmake_minimum_required(VERSION 3.16)
+set(NAME jit_translator)
 
-project(toy-sim)
-
-set(CMAKE_CXX_FLAGS "-Wall -Wextra")
 set(CMAKE_CXX_FLAGS_RELEASE "-O2")
+set(CMAKE_CXX_FLAGS "-Wall -Wextra")
 
-add_subdirectory(third_party)
+add_executable(${NAME} sim.cc)
 
-add_executable(${PROJECT_NAME} sim.cc)
-
-target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/third_party/asmjit/src)
-target_link_libraries(${PROJECT_NAME} PRIVATE asmjit)
+target_include_directories(${NAME} PRIVATE ${CMAKE_SOURCE_DIR}/third_party/asmjit/src)
+target_include_directories(${NAME} PRIVATE ${CMAKE_SOURCE_DIR}/test)
+target_link_libraries(${NAME} PRIVATE asmjit)
