@@ -1,10 +1,3 @@
-#include "asmjit/core/compiler.h"
-#include "asmjit/core/func.h"
-#include "asmjit/core/logger.h"
-#include "asmjit/x86/x86compiler.h"
-#include "asmjit/x86/x86operand.h"
-#include <asmjit/asmjit.h>
-
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -14,117 +7,27 @@
 #include <unordered_map>
 #include <vector>
 
-using Register = std::uint32_t;
-using Addr = std::uint32_t;
-constexpr std::size_t kNumRegisters = 32;
-constexpr std::size_t kMemSize = 0x400000;
-const std::size_t KBbThreshold = 10;
-const std::size_t kAverageBbSize = 10;
+#include <asmjit/asmjit.h>
 
-/**
+#include "sim/cpu_state.hh"
+#include "sim/decoder.hh"
+#include "sim/isa.hh"
+#include "sim/memory.hh"
 
- * ISA description
- * 4 bytes for each instruction
- * first byte - opcode
- * second byte - dest (if present)
- * third, fourth - two sources (if present)
- */
-enum class Opcode : std::uint8_t {
-  kUnknown = 0,
-  kAdd,
-  kHalt,
-  kJump,
-  kLoad,
-  kStore,
-  kBeq,
-};
+using FuncTy = void (*)();
 
-struct Instruction {
-  Opcode opc{};
-  Register src1{}, src2{}, dst{};
-};
+asmjit::JitRuntime runtime;
 
-class Memory {
-  std::vector<Register> m_data;
-
-public:
-  Memory() : m_data(kMemSize) {}
-
-  Register load(Addr addr) const { return m_data[addr]; }
-
-  void store(Addr addr, Register value) { m_data[addr] = value; }
-
-  std::vector<Register> &data() { return m_data; }
-};
-
-struct CpuState {
-  Register pc{};
-  Register regs[kNumRegisters]{};
-  Memory *memory{};
-  bool finished{false};
-
-  //! NOTE: asmjit usage
-  asmjit::JitRuntime runtime;
-  using FuncTy = void (*)(void);
-
-  std::unordered_map<Register, std::vector<Instruction>> bb_cache;
-  std::unordered_map<Register, std::pair<FuncTy, size_t>> translated;
-
-  explicit CpuState(Memory *mem) : memory(mem) {}
-
-  Register getReg(std::size_t id) const { return regs[id]; }
-
-  void setReg(std::size_t id, Register value) { regs[id] = value; }
-
-  void dump() const {
-    std::cout << "CpuState dump: \n";
-    std::cout << "PC: " << pc << std::endl;
-    for (size_t i = 0; i < kNumRegisters; ++i) {
-      std::cout << "[" << i << "] = " << regs[i] << std::endl;
-    }
-  }
-};
-
-Opcode get_opcode(Register bytes) {
-  // Get highest byte
-  return static_cast<Opcode>((bytes >> 24U) & 0xFFU);
-}
-Register get_dst(Register bytes) { return (bytes >> 16U) & 0xFFU; }
-Register get_src1(Register bytes) { return (bytes >> 8U) & 0xFFU; }
-Register get_src2(Register bytes) {
-  // Get lowest byte
-  return bytes & 0xFFU;
+sim::isa::Word fetch(sim::CpuState *cpu) { return cpu->memory->load(cpu->pc); }
+sim::isa::Word fetch(sim::CpuState *cpu, sim::isa::Word addr) {
+  return cpu->memory->load(addr);
 }
 
-Register fetch(CpuState *cpu) { return cpu->memory->load(cpu->pc); }
-Register fetch(CpuState *cpu, Register addr) { return cpu->memory->load(addr); }
-
-Instruction decode(Register bytes) {
-  Instruction insn{};
-  insn.opc = get_opcode(bytes);
-  switch (insn.opc) {
-  case Opcode::kAdd:
-  case Opcode::kHalt:
-  case Opcode::kJump:
-  case Opcode::kLoad:
-  case Opcode::kStore:
-  case Opcode::kBeq:
-    insn.dst = get_dst(bytes);
-    insn.src1 = get_src1(bytes);
-    insn.src2 = get_src2(bytes);
-    break;
-  default:
-    assert(false && "Unknown instruction");
-  }
-
-  return insn;
-}
-
-bool is_terminate(Opcode opc) {
+bool is_terminate(sim::isa::Opcode opc) {
   switch (opc) {
-  case Opcode::kJump:
-  case Opcode::kBeq:
-  case Opcode::kHalt:
+  case sim::isa::Opcode::kJump:
+  case sim::isa::Opcode::kBeq:
+  case sim::isa::Opcode::kHalt:
     return true;
     break;
   default:
@@ -133,25 +36,29 @@ bool is_terminate(Opcode opc) {
   }
   return false;
 }
+constexpr std::size_t KBbThreshold = 10;
+constexpr std::size_t kAverageBbSize = 10;
+using FuncTy = void (*)();
+std::unordered_map<sim::isa::Word, std::vector<sim::isa::Instruction>> bb_cache;
+std::unordered_map<sim::isa::Word, std::pair<FuncTy, size_t>> translated;
 
-std::vector<Instruction> lookup_bb(CpuState *cpu, Register addr) {
-  auto find_res = cpu->bb_cache.find(addr);
+std::vector<sim::isa::Instruction> lookup_bb(sim::CpuState *cpu,
+                                             sim::isa::Word addr) {
+  auto [find_res, wasNew] = bb_cache.try_emplace(addr);
 
-  if (find_res == cpu->bb_cache.end()) {
-    Register cur_addr = addr;
-    std::vector<Instruction> bb;
-    Instruction insn{};
+  if (wasNew) {
+    auto cur_addr = addr;
+    auto &bb = find_res->second;
+    sim::isa::Instruction insn{};
     bb.reserve(kAverageBbSize);
     //
     do {
       auto bytes = fetch(cpu, cur_addr);
-      insn = decode(bytes);
+      insn = sim::decoder::decode(bytes);
       bb.push_back(insn);
       cur_addr += 1;
 
     } while (!is_terminate(insn.opc));
-
-    find_res = cpu->bb_cache.emplace(addr, bb).first;
   }
 
   return find_res->second;
@@ -179,18 +86,19 @@ std::vector<Instruction> lookup_bb(CpuState *cpu, Register addr) {
 // }
 
 // helpers
-static Register loadHelper(Memory *mem, Register addr) {
+static sim::isa::Word loadHelper(sim::Memory *mem, sim::isa::Word addr) {
   return mem->load(addr);
 }
-static void storeHelper(Memory *mem, Register addr, Register value) {
+static void storeHelper(sim::Memory *mem, sim::isa::Word addr,
+                        sim::isa::Word value) {
   return mem->store(addr, value);
 }
 
-std::pair<CpuState::FuncTy, std::size_t>
-translate(CpuState *cpu, const std::vector<Instruction> &bb) {
+std::pair<FuncTy, std::size_t>
+translate(sim::CpuState *cpu, const std::vector<sim::isa::Instruction> &bb) {
   std::size_t icount = 0;
   asmjit::CodeHolder code;
-  code.init(cpu->runtime.environment());
+  code.init(runtime.environment());
   asmjit::FileLogger logger{stdout};
   // code.setLogger(&logger);
 
@@ -207,7 +115,7 @@ translate(CpuState *cpu, const std::vector<Instruction> &bb) {
 
   for (auto insn : bb) {
     switch (insn.opc) {
-    case Opcode::kAdd: {
+    case sim::isa::Opcode::kAdd: {
       cc.mov(temp, toDwordPtr(cpu->regs[insn.src1]));
       cc.mov(temp2, toDwordPtr(cpu->regs[insn.src2]));
       cc.add(temp, temp2);
@@ -221,24 +129,25 @@ translate(CpuState *cpu, const std::vector<Instruction> &bb) {
 
       break;
     }
-    case Opcode::kHalt: {
+    case sim::isa::Opcode::kHalt: {
       cc.mov(asmjit::x86::byte_ptr((size_t)&cpu->finished), 1);
       cc.ret();
       break;
     }
-    case Opcode::kJump: {
+    case sim::isa::Opcode::kJump: {
       cc.mov(temp, toDwordPtr(cpu->regs[insn.dst]));
       cc.mov(asmjit::x86::dword_ptr((size_t)(&cpu->pc)), temp);
 
       cc.ret();
       break;
     }
-    case Opcode::kLoad: {
+    case sim::isa::Opcode::kLoad: {
       asmjit::InvokeNode *invoke{};
       cc.mov(temp, toDwordPtr(cpu->regs[insn.src1]));
 
       cc.invoke(&invoke, (size_t)loadHelper,
-                asmjit::FuncSignature::build<Register, Memory *, Register>());
+                asmjit::FuncSignature::build<sim::isa::Word, sim::Memory *,
+                                             sim::isa::Word>());
       invoke->setArg(0, cpu->memory);
       invoke->setArg(1, temp);
       invoke->setRet(0, toRet);
@@ -250,14 +159,14 @@ translate(CpuState *cpu, const std::vector<Instruction> &bb) {
       cc.mov(asmjit::x86::dword_ptr((size_t)(&cpu->pc)), temp);
       break;
     }
-    case Opcode::kStore: {
+    case sim::isa::Opcode::kStore: {
       cc.mov(temp, toDwordPtr(cpu->regs[insn.dst]));
       cc.mov(toRet, toDwordPtr(cpu->regs[insn.src1]));
 
       asmjit::InvokeNode *invoke{};
-      cc.invoke(
-          &invoke, (size_t)storeHelper,
-          asmjit::FuncSignature::build<void, Memory *, Register, Register>());
+      cc.invoke(&invoke, (size_t)storeHelper,
+                asmjit::FuncSignature::build<void, sim::Memory *,
+                                             sim::isa::Word, sim::isa::Word>());
       invoke->setArg(0, cpu->memory);
       invoke->setArg(1, toRet);
       invoke->setArg(2, temp);
@@ -269,7 +178,7 @@ translate(CpuState *cpu, const std::vector<Instruction> &bb) {
 
       break;
     }
-    case Opcode::kBeq: {
+    case sim::isa::Opcode::kBeq: {
       asmjit::Label beq_beg = cc.newLabel(), beq_end = cc.newLabel();
 
       cc.mov(temp, toDwordPtr(cpu->regs[insn.src1]));
@@ -301,8 +210,8 @@ translate(CpuState *cpu, const std::vector<Instruction> &bb) {
   cc.endFunc();
   cc.finalize();
 
-  CpuState::FuncTy exec_func{};
-  asmjit::Error err = cpu->runtime.add(&exec_func, &code);
+  FuncTy exec_func{};
+  asmjit::Error err = runtime.add(&exec_func, &code);
   //
   if (err) {
     std::cout << "AsmJit failed: " << asmjit::DebugUtils::errorAsString(err)
@@ -314,36 +223,37 @@ translate(CpuState *cpu, const std::vector<Instruction> &bb) {
   return {exec_func, icount};
 }
 
-void interpret(CpuState *cpu, const std::vector<Instruction> &bb) {
+void interpret(sim::CpuState *cpu,
+               const std::vector<sim::isa::Instruction> &bb) {
   for (auto insn : bb) {
     switch (insn.opc) {
-    case Opcode::kAdd: {
+    case sim::isa::Opcode::kAdd: {
       auto res = cpu->getReg(insn.src1) + cpu->getReg(insn.src2);
       cpu->setReg(insn.dst, res);
       cpu->pc += 1;
       break;
     }
-    case Opcode::kHalt: {
+    case sim::isa::Opcode::kHalt: {
       cpu->finished = true;
       break;
     }
-    case Opcode::kJump: {
+    case sim::isa::Opcode::kJump: {
       cpu->pc = cpu->getReg(insn.dst);
       break;
     }
-    case Opcode::kLoad: {
+    case sim::isa::Opcode::kLoad: {
       auto data = cpu->memory->load(cpu->getReg(insn.src1));
       cpu->setReg(insn.dst, data);
       cpu->pc += 1;
       break;
     }
-    case Opcode::kStore: {
+    case sim::isa::Opcode::kStore: {
       auto data = cpu->getReg(insn.dst);
       cpu->memory->store(cpu->getReg(insn.src1), data);
       cpu->pc += 1;
       break;
     }
-    case Opcode::kBeq: {
+    case sim::isa::Opcode::kBeq: {
       bool eq = cpu->getReg(insn.src1) == cpu->getReg(insn.src2);
       cpu->pc = eq ? cpu->getReg(insn.dst) : cpu->pc + 1;
       break;
@@ -360,7 +270,7 @@ int main() {
 #include "code.hpp"
   };
 
-  Memory mem;
+  sim::Memory mem;
 
   // Define entry point
   std::size_t entryAddr = 42;
@@ -371,7 +281,7 @@ int main() {
   }
 
   // Init cpu state
-  CpuState cpu{&mem};
+  sim::CpuState cpu{&mem};
 
   // set entry point
   cpu.pc = entryAddr;
@@ -381,17 +291,17 @@ int main() {
 
   // main loop
   while (!cpu.finished) {
-    auto find_res = cpu.translated.find(cpu.pc);
-    if (find_res != cpu.translated.end()) {
+    auto find_res = translated.find(cpu.pc);
+    if (find_res != translated.end()) {
       find_res->second.first();
       continue;
-    } else if (cpu.bb_cache.count(cpu.pc)) {
-      auto &&basic_block = cpu.bb_cache[cpu.pc];
+    } else if (bb_cache.count(cpu.pc)) {
+      auto &&basic_block = bb_cache[cpu.pc];
       if (basic_block.size() > KBbThreshold) {
         auto [jit_func, icount] = translate(&cpu, basic_block);
 
         if (jit_func) {
-          cpu.translated[cpu.pc] = std::make_pair(jit_func, icount);
+          translated[cpu.pc] = std::make_pair(jit_func, icount);
           jit_func();
           continue;
         }
@@ -401,6 +311,6 @@ int main() {
     interpret(&cpu, basic_block);
   }
 
-  cpu.dump();
+  cpu.dump(std::cout);
   std::cout << "Done execution" << std::endl;
 }
