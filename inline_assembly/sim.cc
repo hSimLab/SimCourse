@@ -6,146 +6,48 @@
 #include <unordered_map>
 #include <vector>
 
+#include "sim/cpu_state.hh"
+#include "sim/decoder.hh"
+#include "sim/isa.hh"
+#include "sim/memory.hh"
+
 #include "capsule_asm.hh"
 
-using Register = std::uint32_t;
-using Addr = std::uint32_t;
-constexpr std::size_t kNumRegisters = 32;
-constexpr std::size_t kMemSize = 0x400000;
-/**
- * ISA description
- * 4 bytes for each instruction
- * first byte - opcode
- * second byte - dest (if present)
- * third, fourth - two sources (if present)
- */
-enum class Opcode : std::uint8_t {
-    kUnknown = 0,
-    kAdd,
-    kHalt,
-    kJump,
-    kLoad,
-    kStore,
-    kBeq,
-    kSub,
-};
-
-struct Memory {
-    std::vector<Register> m_data;
-
-public:
-    Memory() : m_data(kMemSize) {}
-
-    Register load(Addr addr) const { return m_data[addr]; }
-
-    void store(Addr addr, Register value) { m_data[addr] = value; }
-
-    std::vector<Register> &data() { return m_data; }
-};
-
-struct CpuState {
-    Register pc{};
-    Register regs[kNumRegisters]{};
-    Memory *memory{};
-    bool finished{false};
-
-    explicit CpuState(Memory *mem) : memory(mem) {}
-
-    Register getReg(std::size_t id) const { return regs[id]; }
-
-    void setReg(std::size_t id, Register value) { regs[id] = value; }
-
-    void dump() const {
-        std::cout << "CpuState dump: \n";
-        std::cout << "PC: " << pc << std::endl;
-        for (size_t i = 0; i < kNumRegisters; ++i) {
-            std::cout << "[" << i << "] = " << regs[i] << std::endl;
-        }
-    }
-};
-
-struct Instruction {
-    Opcode opc{};
-    Register src1{}, src2{}, dst{};
-};
-
-Register fetch(CpuState *cpu) { return cpu->memory->load(cpu->pc); }
-
-Opcode get_opcode(Register bytes) {
-    // Get highest byte
-    return static_cast<Opcode>((bytes >> 24U) & 0xFFU);
-}
-Register get_dst(Register bytes) { return (bytes >> 16U) & 0xFFU; }
-Register get_src1(Register bytes) { return (bytes >> 8U) & 0xFFU; }
-Register get_src2(Register bytes) {
-    // Get lowest byte
-    return bytes & 0xFFU;
-}
-
-Instruction decode(Register bytes) {
-    Instruction insn{};
-    insn.opc = get_opcode(bytes);
+void execute(sim::CpuState *cpu, sim::isa::Instruction insn) {
     switch (insn.opc) {
-        case Opcode::kAdd:
-        case Opcode::kSub:
-        case Opcode::kHalt:
-        case Opcode::kJump:
-        case Opcode::kLoad:
-        case Opcode::kStore:
-        case Opcode::kBeq:
-            insn.dst = get_dst(bytes);
-            insn.src1 = get_src1(bytes);
-            insn.src2 = get_src2(bytes);
-            break;
-        default:
-            assert(false && "Unknown instruction");
-    }
-
-    return insn;
-}
-
-void execute(CpuState *cpu, Instruction insn) {
-    switch (insn.opc) {
-        case Opcode::kAdd: {
+        case sim::isa::Opcode::kAdd: {
             ARITHM_CAPSULE("add", cpu->regs[insn.dst], cpu->regs[insn.src1],
                            cpu->regs[insn.src2])
 
             ADVANCE_PC(cpu->pc)
             break;
         }
-        case Opcode::kSub: {
-            ARITHM_CAPSULE("sub", cpu->regs[insn.dst], cpu->regs[insn.src1],
-                           cpu->regs[insn.src2])
-
-            ADVANCE_PC(cpu->pc)
-            break;
-        }
-        case Opcode::kHalt: {
+        case sim::isa::Opcode::kHalt: {
             cpu->finished = true;
             break;
         }
-        case Opcode::kJump: {
+        case sim::isa::Opcode::kJump: {
             asm volatile("mov %[rd], %[pc]\n\t"
                          : [pc] "+r"(cpu->pc)
                          : [rd] "r"(cpu->regs[insn.dst]));
 
             break;
         }
-        case Opcode::kLoad: {
+        case sim::isa::Opcode::kLoad: {
             LOAD_CAPSULE(cpu->regs[insn.dst],
-                         cpu->memory->data().at(cpu->regs[insn.src1]))
+                         cpu->memory->get_data().at(cpu->regs[insn.src1]))
 
             ADVANCE_PC(cpu->pc)
             break;
         }
-        case Opcode::kStore: {
+        case sim::isa::Opcode::kStore: {
             STORE_CAPSULE(cpu->regs[insn.dst],
-                          cpu->memory->data().at(cpu->regs[insn.src1]))
+                          cpu->memory->get_data().at(cpu->regs[insn.src1]))
 
             ADVANCE_PC(cpu->pc)
             break;
         }
-        case Opcode::kBeq: {
+        case sim::isa::Opcode::kBeq: {
             B_COND_CAPSULE("je", cpu->pc, cpu->regs[insn.dst],
                            cpu->regs[insn.src1], cpu->regs[insn.src2])
             break;
@@ -162,7 +64,7 @@ int main() {
     };
     //
 
-    Memory mem;
+    sim::Memory mem;
 
     // Define entry point
     std::size_t entryAddr = 42;
@@ -173,7 +75,7 @@ int main() {
     }
 
     // Init cpu state
-    CpuState cpu{&mem};
+    sim::CpuState cpu{&mem};
 
     // set entry point
     cpu.pc = entryAddr;
@@ -183,12 +85,12 @@ int main() {
 
     // main loop
     while (!cpu.finished) {
-        auto bytes = fetch(&cpu);
-        Instruction insn = decode(bytes);
+        auto bytes = cpu.memory->load(cpu.pc);
+        sim::isa::Instruction insn = sim::decoder::decode(bytes);
 
         execute(&cpu, insn);
     }
 
+    cpu.dump(std::cout);
     std::cout << "Done execution" << std::endl;
-    cpu.dump();
 }
