@@ -4,6 +4,9 @@ project(sim-course)
 
 include(cmake/CPM.cmake)
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+
 add_subdirectory(third_party)
 add_subdirectory(lib)
 set(DIRS naive_interpreter
