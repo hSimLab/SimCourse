@@ -18,10 +18,17 @@ struct Hart {
     Hart() : cpu(&mem) {
         // Init cpu state
         cpu.pc = kEntryAddr;
-        // init regfile
+        // Init regfile
 #include "regfile.ini"
     }
 
+    /**
+     * @brief Virtual function to implement specific execution stage
+     *        This function This function will be called in the loop of run()
+     * function
+     *
+     * @param[in] insn -- incoming instruction
+     */
     virtual void execute([[maybe_unused]] sim::isa::Instruction insn) {
         assert(
             false &&
@@ -29,9 +36,20 @@ struct Hart {
     }
 
     /**
-     * @brief Base interpreter step
+     * @brief Function to load program into memory
+
+     * @param[in] program -- incoming bytecode of the program
+    */
+    void load(const std::vector<uint32_t>& program) {
+        for (size_t i = 0; i < program.size(); ++i) {
+            mem.store(kEntryAddr + i, program[i]);
+        }
+    }
+
+    /**
+     * @brief Base interpreter single ste
      *
-     * @param[in] insn incoming instruction
+     * @param[in] insn -- incoming instruction
      */
     void step(sim::isa::Instruction insn) {
         switch (insn.opc) {
@@ -72,18 +90,9 @@ struct Hart {
     }
 
     /**
-     * @brief Function to load program into memory
-
-     * @param[in] program - incoming bytecode of the program
-     */
-    void load(const std::vector<uint32_t>& program) {
-        for (size_t i = 0; i < program.size(); ++i) {
-            mem.store(kEntryAddr + i, program[i]);
-        }
-    }
-
-    /**
      * @brief Main simulation loop
+              Function may be overridden according to implementation specific
+     details of model
      */
     virtual void run() {
         while (!cpu.finished) {
