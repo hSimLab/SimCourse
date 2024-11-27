@@ -24,13 +24,6 @@ public:
     using FuncTy = void (*)();
 
 private:
-    isa::Word fetch(CpuState *cpu) {
-        return cpu->memory->load(cpu->pc);
-    }
-    isa::Word fetch(CpuState *cpu, isa::Word addr) {
-        return cpu->memory->load(addr);
-    }
-
     // helpers
     static isa::Word loadHelper(Memory *mem, isa::Word addr) {
         return mem->load(addr);
@@ -64,7 +57,7 @@ private:
             bb.reserve(kAverageBbSize);
             //
             do {
-                auto bytes = fetch(&cpu, cur_addr);
+                auto bytes = fetch(cur_addr);
                 insn = decoder::decode(bytes);
                 bb.push_back(insn);
                 cur_addr += 1;

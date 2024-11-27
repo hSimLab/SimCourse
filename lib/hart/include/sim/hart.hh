@@ -35,6 +35,7 @@ struct Hart {
             mem.store(kEntryAddr + i, program[i]);
         }
     }
+    isa::Word fetch(isa::Word addr) { return mem.load(addr); }
 
     /**
      * @brief Base interpreter execute stage
@@ -96,7 +97,7 @@ struct Hart {
                        decode it and pass to execute
      */
     virtual void step() {
-        auto bytes = cpu.memory->load(cpu.pc);
+        auto bytes = fetch(cpu.pc);
         sim::isa::Instruction insn = sim::decoder::decode(bytes);
         execute(insn);
     }
