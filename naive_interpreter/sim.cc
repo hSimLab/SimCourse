@@ -10,16 +10,9 @@
 #include "sim/isa.hh"
 #include "sim/memory.hh"
 
-class NaiveInertpreter : public sim::Hart {
-    /**
-     * @brief Interpeter exectution logic
-
-     * @param[in] insn executee instruction
-     */
-    void execute(sim::isa::Instruction insn) override {
-        step(insn);
-    }
-};
+namespace sim {
+class NaiveInertpreter : public Hart {};
+}
 
 int main() {
     // Define program
@@ -27,7 +20,7 @@ int main() {
 #include "code.hpp"
     };
 
-    NaiveInertpreter model{};
+    sim::NaiveInertpreter model{};
     sim::do_sim(&model, program);
 
     model.dump(std::cout);

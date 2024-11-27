@@ -9,6 +9,9 @@
 
 namespace sim {
 
+class Memory;
+class CpuState;
+
 struct Hart {
     static constexpr std::size_t kEntryAddr = 42;
 
@@ -23,19 +26,6 @@ struct Hart {
     }
 
     /**
-     * @brief Virtual function to implement specific execution stage
-     *        This function This function will be called in the loop of run()
-     * function
-     *
-     * @param[in] insn -- incoming instruction
-     */
-    virtual void execute([[maybe_unused]] sim::isa::Instruction insn) {
-        assert(
-            false &&
-            "Error: function to execute single instruction isn't implemented");
-    }
-
-    /**
      * @brief Function to load program into memory
 
      * @param[in] program -- incoming bytecode of the program
@@ -47,11 +37,11 @@ struct Hart {
     }
 
     /**
-     * @brief Base interpreter single ste
+     * @brief Base interpreter execute stage
      *
      * @param[in] insn -- incoming instruction
      */
-    void step(sim::isa::Instruction insn) {
+    void virtual execute(sim::isa::Instruction insn) {
         switch (insn.opc) {
             case sim::isa::Opcode::kAdd: {
                 auto res = cpu.getReg(insn.src1) + cpu.getReg(insn.src2);
@@ -96,10 +86,19 @@ struct Hart {
      */
     virtual void run() {
         while (!cpu.finished) {
-            auto bytes = cpu.memory->load(cpu.pc);
-            sim::isa::Instruction insn = sim::decoder::decode(bytes);
-            execute(insn);
+            step();
         }
+    }
+
+    /**
+     * @brief Base interpreter single step
+              Function load instruction by current pc from the memory then
+                       decode it and pass to execute
+     */
+    virtual void step() {
+        auto bytes = cpu.memory->load(cpu.pc);
+        sim::isa::Instruction insn = sim::decoder::decode(bytes);
+        execute(insn);
     }
 
     void dump(std::ostream& ost) const {

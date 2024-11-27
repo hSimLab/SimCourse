@@ -13,42 +13,44 @@
 #include "sim/isa.hh"
 #include "sim/memory.hh"
 
-class InlineAssemly : public sim::Hart {
-    void execute(sim::isa::Instruction insn) override {
+namespace sim {
+
+class InlineAssemly : public Hart {
+    void execute(isa::Instruction insn) override {
         switch (insn.opc) {
-            case sim::isa::Opcode::kAdd: {
+            case isa::Opcode::kAdd: {
                 ARITHM_CAPSULE("add", cpu.regs[insn.dst], cpu.regs[insn.src1],
                                cpu.regs[insn.src2])
 
                 ADVANCE_PC(cpu.pc)
                 break;
             }
-            case sim::isa::Opcode::kHalt: {
+            case isa::Opcode::kHalt: {
                 cpu.finished = true;
                 break;
             }
-            case sim::isa::Opcode::kJump: {
+            case isa::Opcode::kJump: {
                 asm volatile("mov %[rd], %[pc]\n\t"
                              : [pc] "+r"(cpu.pc)
                              : [rd] "r"(cpu.regs[insn.dst]));
 
                 break;
             }
-            case sim::isa::Opcode::kLoad: {
+            case isa::Opcode::kLoad: {
                 LOAD_CAPSULE(cpu.regs[insn.dst],
                              cpu.memory->get_data().at(cpu.regs[insn.src1]))
 
                 ADVANCE_PC(cpu.pc)
                 break;
             }
-            case sim::isa::Opcode::kStore: {
+            case isa::Opcode::kStore: {
                 STORE_CAPSULE(cpu.regs[insn.dst],
                               cpu.memory->get_data().at(cpu.regs[insn.src1]))
 
                 ADVANCE_PC(cpu.pc)
                 break;
             }
-            case sim::isa::Opcode::kBeq: {
+            case isa::Opcode::kBeq: {
                 B_COND_CAPSULE("je", cpu.pc, cpu.regs[insn.dst],
                                cpu.regs[insn.src1], cpu.regs[insn.src2])
                 break;
@@ -58,6 +60,7 @@ class InlineAssemly : public sim::Hart {
         }
     }
 };
+}  // namespace sim
 
 int main() {
     // Define program
@@ -65,7 +68,7 @@ int main() {
 #include "code.hpp"
     };
 
-    InlineAssemly model{};
+    sim::InlineAssemly model{};
     sim::do_sim(&model, program);
 
     model.dump(std::cout);

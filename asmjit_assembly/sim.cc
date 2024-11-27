@@ -12,19 +12,20 @@
 #include "sim/isa.hh"
 #include "sim/memory.hh"
 
-class JitAssembly : public sim::Hart {
+namespace sim {
+class JitAssembly : public Hart {
 public:
     using FuncTy = void (*)();
 
 private:
-    void execute(sim::isa::Instruction insn) override {
+    void execute(isa::Instruction insn) override {
         asmjit::CodeHolder code;
         code.init(runtime.environment());
 
         asmjit::x86::Assembler assembler{&code};
 
         switch (insn.opc) {
-            case sim::isa::Opcode::kAdd: {
+            case isa::Opcode::kAdd: {
                 assembler.mov(asmjit::x86::eax, cpu.regs[insn.src1]);
                 assembler.add(asmjit::x86::eax, cpu.regs[insn.src2]);
                 //
@@ -41,12 +42,12 @@ private:
                 assembler.ret();
                 break;
             }
-            case sim::isa::Opcode::kHalt: {
+            case isa::Opcode::kHalt: {
                 cpu.finished = true;
                 assembler.ret();
                 break;
             }
-            case sim::isa::Opcode::kJump: {
+            case isa::Opcode::kJump: {
                 assembler.mov(asmjit::x86::eax, cpu.getReg(insn.dst));
                 assembler.mov(asmjit::x86::dword_ptr((size_t)(&cpu.pc)),
                               asmjit::x86::eax);
@@ -54,7 +55,7 @@ private:
                 assembler.ret();
                 break;
             }
-            case sim::isa::Opcode::kLoad: {
+            case isa::Opcode::kLoad: {
                 assembler.mov(asmjit::x86::eax,
                               cpu.memory->load(cpu.regs[insn.src1]));
 
@@ -69,7 +70,7 @@ private:
                 assembler.ret();
                 break;
             }
-            case sim::isa::Opcode::kStore: {
+            case isa::Opcode::kStore: {
                 assembler.mov(
                     asmjit::x86::dword_ptr((size_t)(&cpu.memory->get_data().at(
                         cpu.regs[insn.src1]))),
@@ -84,7 +85,7 @@ private:
                 assembler.ret();
                 break;
             }
-            case sim::isa::Opcode::kBeq: {
+            case isa::Opcode::kBeq: {
                 asmjit::Label beq_beg = assembler.newLabel(),
                               beq_end = assembler.newLabel();
 
@@ -129,6 +130,7 @@ private:
 
     asmjit::JitRuntime runtime;
 };
+}  // namespace sim
 
 int main() {
     // Define program
@@ -136,7 +138,7 @@ int main() {
 #include "code.hpp"
     };
 
-    JitAssembly model{};
+    sim::JitAssembly model{};
     sim::do_sim(&model, program);
 
     model.dump(std::cout);
