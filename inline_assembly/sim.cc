@@ -7,188 +7,69 @@
 #include <vector>
 
 #include "capsule_asm.hh"
+#include "sim/cpu_state.hh"
+#include "sim/decoder.hh"
+#include "sim/hart.hh"
+#include "sim/isa.hh"
+#include "sim/memory.hh"
 
-using Register = std::uint32_t;
-using Addr = std::uint32_t;
-constexpr std::size_t kNumRegisters = 32;
-constexpr std::size_t kMemSize = 0x400000;
-/**
- * ISA description
- * 4 bytes for each instruction
- * first byte - opcode
- * second byte - dest (if present)
- * third, fourth - two sources (if present)
- */
-enum class Opcode : std::uint8_t {
-    kUnknown = 0,
-    kAdd,
-    kHalt,
-    kJump,
-    kLoad,
-    kStore,
-    kBeq,
-    kSub,
-};
+namespace sim {
 
-struct Memory {
-    std::vector<Register> m_data;
+class InlineAssemly : public Hart {
+    void execute(isa::Instruction insn) override {
+        switch (insn.opc) {
+            case isa::Opcode::kAdd: {
+                ARITHM_CAPSULE("add", cpu.regs[insn.dst], cpu.regs[insn.src1],
+                               cpu.regs[insn.src2])
 
-public:
-    Memory() : m_data(kMemSize) {}
+                ADVANCE_PC(cpu.pc)
+                break;
+            }
+            case isa::Opcode::kHalt: {
+                cpu.finished = true;
+                break;
+            }
+            case isa::Opcode::kJump: {
+                asm volatile("mov %[rd], %[pc]\n\t"
+                             : [pc] "+r"(cpu.pc)
+                             : [rd] "r"(cpu.regs[insn.dst]));
 
-    Register load(Addr addr) const { return m_data[addr]; }
+                break;
+            }
+            case isa::Opcode::kLoad: {
+                LOAD_CAPSULE(cpu.regs[insn.dst],
+                             cpu.memory->get_data().at(cpu.regs[insn.src1]))
 
-    void store(Addr addr, Register value) { m_data[addr] = value; }
+                ADVANCE_PC(cpu.pc)
+                break;
+            }
+            case isa::Opcode::kStore: {
+                STORE_CAPSULE(cpu.regs[insn.dst],
+                              cpu.memory->get_data().at(cpu.regs[insn.src1]))
 
-    std::vector<Register> &data() { return m_data; }
-};
-
-struct CpuState {
-    Register pc{};
-    Register regs[kNumRegisters]{};
-    Memory *memory{};
-    bool finished{false};
-
-    explicit CpuState(Memory *mem) : memory(mem) {}
-
-    Register getReg(std::size_t id) const { return regs[id]; }
-
-    void setReg(std::size_t id, Register value) { regs[id] = value; }
-
-    void dump() const {
-        std::cout << "CpuState dump: \n";
-        std::cout << "PC: " << pc << std::endl;
-        for (size_t i = 0; i < kNumRegisters; ++i) {
-            std::cout << "[" << i << "] = " << regs[i] << std::endl;
+                ADVANCE_PC(cpu.pc)
+                break;
+            }
+            case isa::Opcode::kBeq: {
+                B_COND_CAPSULE("je", cpu.pc, cpu.regs[insn.dst],
+                               cpu.regs[insn.src1], cpu.regs[insn.src2])
+                break;
+            }
+            default:
+                assert(false && "Unknown instruction");
         }
     }
 };
-
-struct Instruction {
-    Opcode opc{};
-    Register src1{}, src2{}, dst{};
-};
-
-Register fetch(CpuState *cpu) { return cpu->memory->load(cpu->pc); }
-
-Opcode get_opcode(Register bytes) {
-    // Get highest byte
-    return static_cast<Opcode>((bytes >> 24U) & 0xFFU);
-}
-Register get_dst(Register bytes) { return (bytes >> 16U) & 0xFFU; }
-Register get_src1(Register bytes) { return (bytes >> 8U) & 0xFFU; }
-Register get_src2(Register bytes) {
-    // Get lowest byte
-    return bytes & 0xFFU;
-}
-
-Instruction decode(Register bytes) {
-    Instruction insn{};
-    insn.opc = get_opcode(bytes);
-    switch (insn.opc) {
-        case Opcode::kAdd:
-        case Opcode::kSub:
-        case Opcode::kHalt:
-        case Opcode::kJump:
-        case Opcode::kLoad:
-        case Opcode::kStore:
-        case Opcode::kBeq:
-            insn.dst = get_dst(bytes);
-            insn.src1 = get_src1(bytes);
-            insn.src2 = get_src2(bytes);
-            break;
-        default:
-            assert(false && "Unknown instruction");
-    }
-
-    return insn;
-}
-
-void execute(CpuState *cpu, Instruction insn) {
-    switch (insn.opc) {
-        case Opcode::kAdd: {
-            ARITHM_CAPSULE("add", cpu->regs[insn.dst], cpu->regs[insn.src1],
-                           cpu->regs[insn.src2])
-
-            ADVANCE_PC(cpu->pc)
-            break;
-        }
-        case Opcode::kSub: {
-            ARITHM_CAPSULE("sub", cpu->regs[insn.dst], cpu->regs[insn.src1],
-                           cpu->regs[insn.src2])
-
-            ADVANCE_PC(cpu->pc)
-            break;
-        }
-        case Opcode::kHalt: {
-            cpu->finished = true;
-            break;
-        }
-        case Opcode::kJump: {
-            asm volatile("mov %[rd], %[pc]\n\t"
-                         : [pc] "+r"(cpu->pc)
-                         : [rd] "r"(cpu->regs[insn.dst]));
-
-            break;
-        }
-        case Opcode::kLoad: {
-            LOAD_CAPSULE(cpu->regs[insn.dst],
-                         cpu->memory->data().at(cpu->regs[insn.src1]))
-
-            ADVANCE_PC(cpu->pc)
-            break;
-        }
-        case Opcode::kStore: {
-            STORE_CAPSULE(cpu->regs[insn.dst],
-                          cpu->memory->data().at(cpu->regs[insn.src1]))
-
-            ADVANCE_PC(cpu->pc)
-            break;
-        }
-        case Opcode::kBeq: {
-            B_COND_CAPSULE("je", cpu->pc, cpu->regs[insn.dst],
-                           cpu->regs[insn.src1], cpu->regs[insn.src2])
-            break;
-        }
-        default:
-            assert(false && "Unknown instruction");
-    }
-}
+}  // namespace sim
 
 int main() {
     // Define program
-    std::uint32_t program[] = {
+    std::vector<uint32_t> program = {
 #include "code.hpp"
     };
-    //
 
-    Memory mem;
+    sim::InlineAssemly model{};
+    sim::do_sim(&model, program);
 
-    // Define entry point
-    std::size_t entryAddr = 42;
-
-    // Load program to memory
-    for (size_t i = 0; i < std::size(program); ++i) {
-        mem.store(entryAddr + i, program[i]);
-    }
-
-    // Init cpu state
-    CpuState cpu{&mem};
-
-    // set entry point
-    cpu.pc = entryAddr;
-
-    // init regfile
-#include "regfile.ini"
-
-    // main loop
-    while (!cpu.finished) {
-        auto bytes = fetch(&cpu);
-        Instruction insn = decode(bytes);
-
-        execute(&cpu, insn);
-    }
-
-    std::cout << "Done execution" << std::endl;
-    cpu.dump();
+    model.dump(std::cout);
 }
