@@ -9,9 +9,6 @@
 
 namespace sim {
 
-class Memory;
-class CpuState;
-
 struct Hart {
     static constexpr std::size_t kEntryAddr = 42;
 
