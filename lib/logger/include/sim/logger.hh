@@ -16,7 +16,7 @@ class Logger {
 public:
     Logger(const CpuState* state) : m_state(state) {}
 
-    void dump(sim::isa::Instruction insn, std::size_t pc = 0,
+    void dump(sim::isa::Instruction insn, isa::Word bytes, std::size_t pc = 0,
               std::size_t icount = 0) {
         if (m_enable && m_output.is_open()) {
             bool is_load = insn.opc == isa::Opcode::kLoad,
@@ -24,10 +24,7 @@ public:
             auto dst_value = m_state->getReg(insn.dst);
 
             m_output << icount << ": " << pc << " ";
-            m_output << m_disassemble.at(insn.opc) << " "
-                     << "X" << insn.dst << " X" << insn.src1;
-
-            if (!(is_load || is_store)) m_output << " X" << insn.src2;
+            m_output << "0x" << std::hex << bytes << " " << std::dec;
 
             m_output << std::endl;
 
@@ -47,8 +44,8 @@ public:
                 m_output << "X" << insn.dst << " <== 0x" << std::hex
                          << mem_value << std::dec << std::endl;
             } else {
-                m_output << "X" << insn.dst
-                         << " <== " << m_state->getReg(insn.dst) << std::endl;
+                m_output << "X" << insn.dst << " <== " << std::hex
+                         << m_state->getReg(insn.dst) << std::dec << std::endl;
             }
         }
     }
@@ -63,11 +60,12 @@ private:
     std::ofstream m_output;
     bool m_enable{true};
     //
-    static inline const std::unordered_map<isa::Opcode, std::string> m_disassemble{
-        {isa::Opcode::kUnknown, "UNKNOWN"}, {isa::Opcode::kAdd, "ADD"},
-        {isa::Opcode::kHalt, "HALT"},       {isa::Opcode::kJump, "JUMP"},
-        {isa::Opcode::kLoad, "LOAD"},       {isa::Opcode::kStore, "STORE"},
-        {isa::Opcode::kBeq, "BEQ"}};
+    static inline const std::unordered_map<isa::Opcode, std::string>
+        m_disassemble{
+            {isa::Opcode::kUnknown, "UNKNOWN"}, {isa::Opcode::kAdd, "ADD"},
+            {isa::Opcode::kHalt, "HALT"},       {isa::Opcode::kJump, "JUMP"},
+            {isa::Opcode::kLoad, "LOAD"},       {isa::Opcode::kStore, "STORE"},
+            {isa::Opcode::kBeq, "BEQ"}};
 };
 }  // namespace sim
 

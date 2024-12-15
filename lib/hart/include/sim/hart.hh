@@ -102,7 +102,7 @@ struct Hart {
         auto bytes = fetch(cur_pc);
         sim::isa::Instruction insn = sim::decoder::decode(bytes);
         execute(insn);
-        logger.dump(insn, cur_pc, icount);
+        logger.dump(insn, bytes, cur_pc, icount);
         ++icount;
     }
 
