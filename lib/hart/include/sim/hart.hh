@@ -5,6 +5,7 @@
 #include <iostream>
 
 #include "sim/cpu_state.hh"
+#include "sim/logger.hh"
 #include "sim/memory.hh"
 
 namespace sim {
@@ -14,8 +15,11 @@ struct Hart {
 
     Memory mem{};
     CpuState cpu;
+    Logger logger;
 
-    Hart() : cpu(&mem) {
+    std::size_t icount = 0;
+
+    Hart() : cpu(&mem), logger(&cpu) {
         // Init cpu state
         cpu.pc = kEntryAddr;
         // Init regfile
@@ -94,10 +98,15 @@ struct Hart {
                        decode it and pass to execute
      */
     virtual void step() {
-        auto bytes = fetch(cpu.pc);
+        auto cur_pc = cpu.pc;
+        auto bytes = fetch(cur_pc);
         sim::isa::Instruction insn = sim::decoder::decode(bytes);
         execute(insn);
+        logger.dump(insn, bytes, cur_pc, icount);
+        ++icount;
     }
+
+    void set_logger(const std::string& filename) { logger.set(filename); }
 
     void dump(std::ostream& ost) const {
         cpu.dump(ost);
