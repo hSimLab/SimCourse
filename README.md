@@ -8,6 +8,10 @@ All teaching materials used during the semester are [here](slides/).
 
 ## Demo Code
 
+You can find [simulator library](lib/) and [test generation script](test/) here.
+
+During the course we consistently improve our toy model of the simulator.
+
 1. [Naive Interpreter](naive_interpreter/sim.cc)
 2. [Inline Assembly model](inline_assembly/sim.cc)
 3. [AsmJit Assembly model](asmjit_assembly/sim.cc)
@@ -26,3 +30,18 @@ All teaching materials used during the semester are [here](slides/).
 9. [Cycle-Accurate Models](slides/Lecture_8_CA_models.pdf)
 10. [Caches](slides/Lecture_9_Caches.pdf)
 11. [Program Execution Analysis](slides/Lecture_10_Program_Execution_Analysis.pdf)
+
+## Usage
+
+From the root of source directory configure:
+
+```bash
+mkdir -p build/
+cmake -B build -S .
+```
+
+Then run build:
+
+```bash
+cmake --build build/ -j<nproc>
+```
