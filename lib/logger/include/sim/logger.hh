@@ -59,13 +59,6 @@ private:
     const CpuState* m_state{nullptr};
     std::ofstream m_output;
     bool m_enable{true};
-    //
-    static inline const std::unordered_map<isa::Opcode, std::string>
-        m_disassemble{
-            {isa::Opcode::kUnknown, "UNKNOWN"}, {isa::Opcode::kAdd, "ADD"},
-            {isa::Opcode::kHalt, "HALT"},       {isa::Opcode::kJump, "JUMP"},
-            {isa::Opcode::kLoad, "LOAD"},       {isa::Opcode::kStore, "STORE"},
-            {isa::Opcode::kBeq, "BEQ"}};
 };
 }  // namespace sim
 
