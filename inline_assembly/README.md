@@ -1,4 +1,4 @@
-## Inline Assembly Intepreter
+## Inline Assembly Interpreter
 
 While coding the execution stage, you probably thought about at least one of the points
 

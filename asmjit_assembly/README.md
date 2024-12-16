@@ -1,4 +1,4 @@
-## AsmJit Intepreter
+## AsmJit Interpreter
 
 Implementing semantics using inline assembler is definitely a step backwards in terms of the evolution of programming languages. We certainly wouldn't do it that way. However, the optimization worked.
 
