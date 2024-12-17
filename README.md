@@ -17,6 +17,8 @@ During the course we consistently improve our toy model of the simulator.
 3. [AsmJit Assembly model](asmjit_assembly/sim.cc)
 4. [JIT translator](jit_translator/sim.cc)
 
+Here are the results of a comparison of four different models on a [test](test/code.hpp) in which we varied the number of loop iterations (aka LC):
+
 - MIPS:
 ![img](pics/bench-mips.png)
 

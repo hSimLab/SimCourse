@@ -40,10 +40,23 @@ We would like to pay your attention to two details:
 
 By carefully considering the two previous points, you will most likely avoid segfault.
 
+Let's benchmark this implementation and ...
+
 ### Benchmark
+
+This is a failure. Even a naive interpreter compiled without optimizations (-O0) reaches 40 MIPS.
 
 - MIPS:
 ![img](../pics/asmjit-interp-mips.png)
 
+- Why does this happen? There are two main reasons:
+    - Redundant calls of host code emitter
+    - Redundant, but vital complete the execution of every guest instruction
+
 - Time, seconds:
 ![img](../pics/asmjit-interp-time.png)
+
+Is there any way we can reduce the excessive number of emitter calls?
+
+Of course, you can. First, you'll have to understand the [technology of binary dynamic translation](../slides/05_Interpreter+.pdf) in detail.
+Then will try to [improve our model](../jit_translator/).

@@ -36,8 +36,14 @@ So, let's benchmark our optimization.
 
 ### Benchmark
 
+We see that optimization and suffering with assembler inserts were not in vain. The model was able to overcome 40 MIPS, but not much more.
+
 - MIPS:
 ![img](../pics/inline-asm-mips.png)
 
+Moreover, on average, it works almost at the same speed as the naive interpretation.
+
 - Time, seconds:
 ![img](../pics/inline-asm-time.png)
+
+The obtained results indicate that it is necessary to look for new possible optimizations of execution.
