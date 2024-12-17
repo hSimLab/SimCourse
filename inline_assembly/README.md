@@ -35,3 +35,9 @@ And in the first approximation, we will do this in the crudest way - [inline ass
 So, let's benchmark our optimization.
 
 ### Benchmark
+
+- MIPS:
+![img](../pics/inline-asm-mips.png)
+
+- Time, seconds:
+![img](../pics/inline-asm-time.png)

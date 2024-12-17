@@ -32,3 +32,9 @@ The operating algorithm is generally similar to the stage of the command executi
 Let's take a look at the results of the model's performance for subsequent comparison with the simulator's optimizations.
 
 ### Benchmark
+
+- MIPS:
+![img](../pics/naive-interp-mips.png)
+
+- Time, seconds:
+![img](../pics/naive-interp-time.png)

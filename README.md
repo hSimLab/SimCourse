@@ -17,6 +17,12 @@ During the course we consistently improve our toy model of the simulator.
 3. [AsmJit Assembly model](asmjit_assembly/sim.cc)
 4. [JIT translator](jit_translator/sim.cc)
 
+- MIPS:
+![img](pics/bench-mips.png)
+
+- Time, seconds:
+![img](pics/bench-time.png)
+
 ## Slides
 
 1. [Introduction](slides/00_Introduction.pdf)

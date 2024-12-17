@@ -41,3 +41,9 @@ We would like to pay your attention to two details:
 By carefully considering the two previous points, you will most likely avoid segfault.
 
 ### Benchmark
+
+- MIPS:
+![img](../pics/asmjit-interp-mips.png)
+
+- Time, seconds:
+![img](../pics/asmjit-interp-time.png)
