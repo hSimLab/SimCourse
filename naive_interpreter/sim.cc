@@ -21,8 +21,7 @@ int main() {
     };
 
     sim::NaiveInertpreter model{};
-    model.set_logger("sim.log");
     sim::do_sim(&model, program);
-
     model.dump(std::cout);
+    std::cout << "Icount = " << model.icount << std::endl;
 }
