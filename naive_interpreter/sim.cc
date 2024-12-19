@@ -21,7 +21,7 @@ int main() {
     };
 
     sim::NaiveInertpreter model{};
-    sim::do_sim(&model, program);
+    sim::do_sim(model, program);
     model.dump(std::cout);
     std::cout << "Icount = " << model.icount << std::endl;
 }

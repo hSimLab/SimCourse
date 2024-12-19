@@ -240,7 +240,7 @@ int main() {
     };
 
     sim::JitTranslator model{};
-    sim::do_sim(&model, program);
+    sim::do_sim(model, program);
 
     model.dump(std::cout);
 }

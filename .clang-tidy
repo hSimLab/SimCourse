@@ -1,0 +1,22 @@
+---
+Checks: >
+  *,
+  clang-diagnostic-*,
+  clang-analyzer-*,
+  -llvmlibc-*,
+  -modernize-use-trailing-return-type,
+  -fuchsia-default-arguments-calls,
+  -google-readability-braces-around-statements,
+  -hicpp-braces-around-statements,
+  -altera-unroll-loops,
+  -altera-struct-pack-align,
+  -altera-id-dependent-backward-branch,
+  -cppcoreguidelines-pro-type-vararg,
+  -hicpp-vararg,
+  -fuchsia-multiple-inheritance,
+  -readability-identifier-length
+
+
+CheckOptions:
+  - key: misc-non-private-member-variables-in-classes.IgnoreClassesWithAllMemberVariablesBeingPublic
+    value: true

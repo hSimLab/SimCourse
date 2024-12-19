@@ -69,7 +69,7 @@ int main() {
     };
 
     sim::InlineAssemly model{};
-    sim::do_sim(&model, program);
+    sim::do_sim(model, program);
 
     model.dump(std::cout);
 }

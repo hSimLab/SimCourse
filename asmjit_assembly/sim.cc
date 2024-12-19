@@ -139,7 +139,7 @@ int main() {
     };
 
     sim::JitAssembly model{};
-    sim::do_sim(&model, program);
+    sim::do_sim(model, program);
 
     model.dump(std::cout);
 }

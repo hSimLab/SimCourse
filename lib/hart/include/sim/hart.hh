@@ -116,11 +116,11 @@ struct Hart {
     }
 };
 
-void do_sim(Hart* hart, const std::vector<uint32_t>& program) {
+void do_sim(Hart& hart, const std::vector<uint32_t>& program) {
     Time::Timer timer{};
     //
-    hart->load(program);
-    hart->run();
+    hart.load(program);
+    hart.run();
     std::cout << "Time elapsed in microseconds "
               << timer.elapsed<std::chrono::microseconds>() << std::endl;
 }
