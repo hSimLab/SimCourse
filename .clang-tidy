@@ -14,7 +14,8 @@ Checks: >
   -cppcoreguidelines-pro-type-vararg,
   -hicpp-vararg,
   -fuchsia-multiple-inheritance,
-  -readability-identifier-length
+  -readability-identifier-length,
+  -cppcoreguidelines-pro-bounds-constant-array-index
 
 
 CheckOptions:
